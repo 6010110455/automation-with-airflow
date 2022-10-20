@@ -4,24 +4,27 @@ A simple example of using Airflow to create a worflow for calling APIs.
 
 # 🌊 Quick start
 
-This approximately follows the official quick-start documentation 
+This approximately follows the official quick-start documentation
 
 First run
 
 ```
 bash airflow-init.sh
 ```
+
 Wait till you see exit output that looks like this:
 
 ![image](airflow-init.png)
 
 Then run
+
 ```
 bash airflow-up.sh
 ```
+
 which will bring up you Airflow docker containers.
 
-You should now be able to access you Airflow UI instance through [localhost:8080](localhost:8080). Log in with username and password `airflow`. 
+You should now be able to access you Airflow UI instance through [localhost:8080](localhost:8080). Log in with username and password `airflow`.
 
 Add this [snippet of code](https://gist.github.com/chrisgschon/380f430c000a8c957c3a50756a9d3c3b) to the `dags` folder as `dag_joke_collector.py`
 
@@ -44,7 +47,7 @@ def callable_virtualenv_collect_joke():
             field_names = ['id','type','setup','punchline']
             dict_writer = DictWriter(write_obj, fieldnames=field_names)
             dict_writer.writerow(joke_dict)
-    
+
 default_args = {
     'owner': 'airflow',
     'depends_on_past': False,
@@ -77,6 +80,7 @@ Now, you should see the `joke collector` DAG after refreshing the UI. Click the 
 ![image](readme-ui.png)
 
 To retrieve jokes from the worker container to your local machine, run
+
 ```
 bash get-jokes-from-container.sh
 ```
@@ -90,4 +94,3 @@ Run the following to fully refresh your docker containers and Airflow related da
 ```
 bash docker-full-refresh.sh
 ```
-
