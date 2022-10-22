@@ -111,6 +111,7 @@ def get_data_from_api():
     if today_sales.empty:
         today_sales.loc['0'] = ['0', '0']
     today_sales_str = today_sales["total_price"].astype("string")
+    today_sales_str.reset_index(drop=True, inplace=True)
 
     yesterdayDate = datetime.datetime.now() - datetime.timedelta(1)
     yesterday = yesterdayDate.strftime("%Y-%m-%d").replace('-0', '-')
@@ -118,11 +119,11 @@ def get_data_from_api():
     if yesterday_sales.empty:
         yesterday_sales.loc['0'] = ['0', '0', '0', '0', '0']
     yesterday_sales_str = yesterday_sales["total_price"].astype("string")
+    yesterday_sales_str.reset_index(drop=True, inplace=True)
 
     print("today", today)
-    print("today_sales_str", today_sales_str.reset_index(drop=True, inplace=True))
-    print("yesterday_sales_str", yesterday_sales_str.reset_index(
-        drop=True, inplace=True))
+    print("today_sales_str", today_sales_str)
+    print("yesterday_sales_str", yesterday_sales_str)
 
     message = "สรุปประจำวัน \n" + "วันที่ " + today + \
         "\n▶รายได้ทั้งหมด" + " = " + today_sales_str + " บาท" + \
@@ -165,4 +166,4 @@ with DAG(
         bash_command='date'
     )
 
-task_start >> task_send_line_notify_start >> task_get_data_from_api >> task_sent_line_notify_end >> task_end
+task_start >> task_get_data_from_api >> task_end

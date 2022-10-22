@@ -114,6 +114,7 @@ def get_data_from_api():
         this_month_sales.loc['0'] = ['0', '0']
     this_month_sales_str = this_month_sales["total_price"]
     this_month_sales_str = round(this_month_sales_str, 2).astype("string")
+    this_month_sales_str.reset_index(drop=True, inplace=True)
 
     today1 = datetime.date.today()
     first1 = today1.replace(day=1)
@@ -125,12 +126,11 @@ def get_data_from_api():
         last_month_sales.loc['0'] = ['0', '0']
     last_month_sales_str = last_month_sales["total_price"]
     last_month_sales_str = round(last_month_sales_str, 2).astype("string")
+    last_month_sales_str.reset_index(drop=True, inplace=True)
 
     print("this_month", this_month)
-    print("this_month_sales_str", this_month_sales_str.reset_index(
-        drop=True, inplace=True))
-    print("last_month_sales_str", last_month_sales_str.reset_index(
-        drop=True, inplace=True))
+    print("this_month_sales_str", this_month_sales_str)
+    print("last_month_sales_str", last_month_sales_str)
 
     message = "สรุปประจำเดือน " + this_month + "\n▶รายได้ทั้งหมด" + " = " + this_month_sales_str + \
         " บาท" + "\n▶รายได้ทั้งหมดเดือนก่อน" + " = " + last_month_sales_str + " บาท"
@@ -173,4 +173,4 @@ with DAG(
         bash_command='date'
     )
 
-task_start >> task_send_line_notify_start >> task_get_data_from_api >> task_sent_line_notify_end >> task_end
+task_start >> task_get_data_from_api >> task_end

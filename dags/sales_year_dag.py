@@ -52,7 +52,22 @@ def sent_line_notify_end():
     print(r.text)
 
 
-def get_data_from_api_and_cleansing(command):
+def send_line_notify_message_year(message):
+    url = 'https://notify-api.line.me/api/notify'
+    token = '1aDXOIcl3z8MB1jHvbDjBNcmeNQCjWlVfplfckgJj5n'
+    headers = {
+        'content-type':
+        'application/x-www-form-urlencoded',
+        'Authorization': 'Bearer '+token
+    }
+
+    msg = message
+    r = requests.post(url, headers=headers, data={'message': msg})
+
+    print(r.text)
+
+
+def get_data_from_api():
     query_payload = {
         'size': 6000,
         'page': 1,
@@ -69,6 +84,63 @@ def get_data_from_api_and_cleansing(command):
                                                 'Content-Type': 'application/json', 'Authorization': f'Bearer {TOKEN}'}
                                          )
 
+    sales_transaction_json = json.loads(sales_transaction.content)
+    sales_transaction_rows = sales_transaction_json['rows']
+    st_df = pd.DataFrame(sales_transaction_rows)
+
+    st_df['createdAt'] = pd.to_datetime(st_df['createdAt'])
+    st_df['month'] = (st_df['createdAt']).dt.month
+    st_df['year'] = (st_df['createdAt']).dt.year
+
+    st_df['Time'] = pd.to_datetime(st_df['createdAt'])
+    st_gy_df = st_df.groupby(
+        ['year'])['total_price_offline_out_before'].sum().reset_index()
+
+    st_gy_df = st_gy_df.sort_values(by=['year']).reset_index(drop=True)
+    st_gy_df = st_gy_df.rename(
+        columns={'total_price_offline_out_before': 'total_price'})
+
+    this_year = datetime.date.today().strftime("%Y")
+    this_year_sales = st_gy_df.loc[st_gy_df['year'] == this_year]
+
+    this_year = datetime.date.today().strftime("%Y")
+    this_year_sales = st_gy_df.loc[st_gy_df['year'].astype(
+        "string") == this_year]
+
+    this_year_sales['total_price']
+
+    if this_year_sales.empty:
+        this_year_sales.loc['0'] = ['0', '0']
+    this_year_sales_str = this_year_sales["total_price"]
+    this_year_sales.reset_index(drop=True, inplace=True)
+
+    last_year = int(this_year) - 1
+    last_year = str(last_year)
+
+    last_year_sales = st_gy_df.loc[st_gy_df['year'].astype(
+        "string") == last_year]
+
+    last_year_sales['total_price']
+
+    if last_year_sales.empty:
+        last_year_sales.loc['0'] = ['0', '0']
+    last_year_sales_str = last_year_sales["total_price"]
+    last_year_sales.reset_index(drop=True, inplace=True)
+
+    last_year_sales_str = round(last_year_sales_str, 2).astype("string")
+    last_year_sales_str
+
+    print("this_year", this_year)
+    print("this_year_sales_str", this_year_sales_str)
+    print("last_year_sales_str", last_year_sales_str)
+
+    message = "สรุปประจำปี " + this_year + "\n▶รายได้ทั้งหมด" + " = " + this_year_sales_str + \
+        " บาท" + "\n▶รายได้ทั้งหมดปีก่อน" + " = " + last_year_sales_str + " บาท"
+
+    print("message", message)
+
+    send_line_notify_message_year(message)
+
 
 with DAG(
     dag_id='sales_year_dag',
@@ -83,19 +155,9 @@ with DAG(
         bash_command='date'
     )
 
-    task_send_line_notify_start = PythonOperator(
-        task_id='send_line_notify_start',
-        python_callable=send_line_notify_start
-    )
-
-    task_save = BashOperator(
-        task_id='save',
-        bash_command='date'
-    )
-
-    task_sent_line_notify_end = PythonOperator(
-        task_id='sent_line_notify_end',
-        python_callable=sent_line_notify_end
+    task_get_data_from_api = PythonOperator(
+        task_id='get_data_from_api',
+        python_callable=get_data_from_api
     )
 
     task_end = BashOperator(
@@ -103,4 +165,4 @@ with DAG(
         bash_command='date'
     )
 
-task_start >> task_send_line_notify_start >> task_save >> task_sent_line_notify_end >> task_end
+task_start >> task_get_data_from_api >> task_end
