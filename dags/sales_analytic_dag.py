@@ -96,29 +96,73 @@ def get_data_from_api_and_cleansing(command):
     st_df['month'] = (st_df['createdAt']).dt.month
     st_df['year'] = (st_df['createdAt']).dt.year
 
-    if command == 'daily':
-        st_gmy_df = st_df.groupby(['year', 'month', 'day'])[
-            'total_price_offline_out_before'].sum().reset_index()
-        st_gmy_df = st_gmy_df.rename(
-            columns={'total_price_offline_out_before': 'total_price'})
-        st_gmy_df = st_gmy_df.assign(Date=st_gmy_df.year.astype(
-            str) + '-' + st_gmy_df.month.astype(str) + '-' + st_gmy_df.day.astype(str))
-        st_gmy_df.drop(['month', 'year', 'day'], axis=1, inplace=True)
+    st_gmy_df = st_df.groupby(['year', 'month', 'day'])[
+        'total_price_offline_out_before'].sum().reset_index()
+    st_gmy_df = st_gmy_df.rename(
+        columns={'total_price_offline_out_before': 'total_price'})
+    st_gmy_df = st_gmy_df.assign(Date=st_gmy_df.year.astype(
+        str) + '-' + st_gmy_df.month.astype(str) + '-' + st_gmy_df.day.astype(str))
 
+    if command == 'daily':
         today = datetime.date.today().strftime("%Y-%m-%d")
         today_sales = st_gmy_df.loc[st_gmy_df['Date'] == today]
+        if today_sales.empty:
+            today_sales.loc['0'] = ['0', '0']
+        today_sales_str = today_sales["total_price"].astype("string")
 
         yesterdayDate = datetime.datetime.now() - datetime.timedelta(1)
         yesterday = yesterdayDate.strftime("%Y-%m-%d")
         yesterday_sales = st_gmy_df.loc[st_gmy_df['Date'] == yesterday]
+        if yesterday_sales.empty:
+            yesterday_sales.loc['0'] = ['0', '0']
+        yesterday_sales_str = yesterday_sales["total_price"].astype("string")
 
-        message = 'รายได้ทั้งหมดวันนี้' + " = " + "555" + \
-            yesterday_sales["total_price"].astype(str) + " " + "บาท"
+        print("today", today)
+        print("today_sales_str", today_sales_str)
+        print("yesterday_sales_str", yesterday_sales_str)
+
+        message = 'สรุปประจำวัน \n' + 'วันที่' + today + \
+            ' \n รายได้ทั้งหมด' + ' = ' + today_sales_str + ' บาท' + \
+            ' \n รายได้ทั้งหมดเมื่อวาน' + ' = ' + yesterday_sales_str + ' บาท'
+
+        print("message", message)
 
         send_line_notify_message(message)
         # return st_df
     if command == 'month':
-        return st_df
+        st_gmy_df_my = st_gmy_df.rename(
+            columns={'total_price_offline_out_before': 'total_price'})
+        st_gmy_df_my = st_gmy_df_my.assign(Date=st_gmy_df_my.year.astype(
+            str) + '-' + st_gmy_df_my.month.astype(str))
+
+        this_month = datetime.date.today().strftime("%Y-%m").replace('-0', '-')
+        this_month_sales = st_gmy_df_my.loc[st_gmy_df_my['Date'] == this_month]
+
+        if this_month_sales.empty:
+            this_month_sales.loc['0'] = ['0', '0']
+        this_month_sales_str = this_month_sales["total_price"].astype("string")
+
+        today1 = datetime.date.today()
+        first1 = today1.replace(day=1)
+        last_month = (first1 - datetime.timedelta(days=1)
+                      ).strftime("%Y-%m").replace('-0', '-')
+        last_month_sales = st_gmy_df_my.loc[st_gmy_df_my['Date'] == last_month]
+        if last_month_sales.empty:
+            last_month_sales.loc['0'] = ['0', '0']
+        last_month_sales_str = last_month_sales["total_price"].astype("string")
+
+        print("this_month_sales", this_month_sales)
+        print("this_month_sales_str", this_month_sales_str)
+        print("last_month_sales_str", last_month_sales_str)
+
+        message = 'สรุปประจำเดือน \n' + 'ที่' + this_month + \
+            ' \n รายได้ทั้งหมด' + ' = ' + this_month_sales_str + ' บาท' + \
+            ' \n รายได้ทั้งหมดเดือนที่แล้ว' + ' = ' + last_month_sales_str + ' บาท'
+
+        print("message", message)
+
+        send_line_notify_message(message)
+        # return st_df
     if command == 'year':
         return st_df
 
@@ -131,6 +175,8 @@ def get_month_sales():
     get_data_from_api_and_cleansing('month')
 
 
+def get_year_sales():
+    get_data_from_api_and_cleansing('year')
 # def month_sales_store():
 #     sales_data = get_data_from_api_and_cleansing()
 #     print("daily_sales_store")
@@ -169,6 +215,11 @@ with DAG(
         python_callable=get_month_sales
     )
 
+    task_get_year_sales = PythonOperator(
+        task_id='send_get_year_sales',
+        python_callable=get_year_sales
+    )
+
     task_save = BashOperator(
         task_id='save',
         bash_command='date'
@@ -185,4 +236,4 @@ with DAG(
     )
 
 task_start >> task_send_line_notify_start >> [
-    task_get_daily_sales, task_get_month_sales] >> task_save >> task_sent_line_notify_end >> task_end
+    task_get_daily_sales, task_get_month_sales, task_get_year_sales] >> task_save >> task_sent_line_notify_end >> task_end
