@@ -1,15 +1,15 @@
-import json
+# import json
 from datetime import datetime
 from airflow.models import DAG
 from airflow.providers.http.sensors.http import HttpSensor
-from airflow.providers.http.operators.http import SimpleHttpOperator
-from airflow.operators.python import PythonOperator
+# from airflow.providers.http.operators.http import SimpleHttpOperator
+# from airflow.operators.python import PythonOperator
 
 
-def save_posts(ti) -> None:
-    posts = ti.xcom_pull(task_ids=['get_posts'])
-    with open(f"/Users/60101/Desktop/Data_en/airflow/automation-with-airflow/data/posts.json", 'w') as f:
-        json.dump(posts[0], f)
+# def save_posts(ti) -> None:
+#     posts = ti.xcom_pull(task_ids=['get_posts'])
+#     with open(f"/Users/60101/Desktop/Data_en/airflow/automation-with-airflow/data/posts.json", 'w') as f:
+#         json.dump(posts[0], f)
 
 
 with DAG(
@@ -25,14 +25,14 @@ with DAG(
         endpoint="posts/"
     )
 
-    task_get_posts = SimpleHttpOperator(
-        task_id="get_post",
-        http_conn_id="api_posts",
-        endpoint="posts/",
-        method="GET",
-        response_filter=lambda response: json.loads(response.text),
-        log_response=True
-    )
+    # task_get_posts = SimpleHttpOperator(
+    #     task_id="get_post",
+    #     http_conn_id="api_posts",
+    #     endpoint="posts/",
+    #     method="GET",
+    #     response_filter=lambda response: json.loads(response.text),
+    #     log_response=True
+    # )
 
     # task_save = PythonOperator(
     #     task_id='save_posts',
@@ -40,4 +40,4 @@ with DAG(
     # )
 
 
-task_is_api_active >> task_get_posts
+task_is_api_active

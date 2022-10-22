@@ -1,3 +1,4 @@
+from email.mime import message
 import json
 import time
 import requests
@@ -21,7 +22,53 @@ TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjYxMzcwYzMwMWMyNzdjMDdlOG
 size = 6000
 
 
-def get_data_from_api():
+def send_line_notify_start():
+    url = 'https://notify-api.line.me/api/notify'
+    token = '1aDXOIcl3z8MB1jHvbDjBNcmeNQCjWlVfplfckgJj5n'
+    headers = {
+        'content-type':
+        'application/x-www-form-urlencoded',
+        'Authorization': 'Bearer '+token
+    }
+
+    msg = "เริ่มการทำงาน ETL \n"
+    r = requests.post(url, headers=headers, data={'message': msg})
+
+    print(r.text)
+
+
+def sent_line_notify_end():
+    url = 'https://notify-api.line.me/api/notify'
+    token = '1aDXOIcl3z8MB1jHvbDjBNcmeNQCjWlVfplfckgJj5n'
+    headers = {
+        'content-type':
+        'application/x-www-form-urlencoded',
+        'Authorization': 'Bearer '+token
+    }
+
+    msg = "จบการทำงาน ETL \n"
+    r = requests.post(url, headers=headers, data={'message': msg})
+
+    print(r.text)
+
+
+def send_line_notify_message(message):
+    url = 'https://notify-api.line.me/api/notify'
+    token = '1aDXOIcl3z8MB1jHvbDjBNcmeNQCjWlVfplfckgJj5n'
+    headers = {
+        'content-type':
+        'application/x-www-form-urlencoded',
+        'Authorization': 'Bearer '+token
+    }
+
+    msg = message
+    r = requests.post(url, headers=headers, data={
+                      'message': msg, 'stickerPackageId': 1070, 'stickerId': 17854})
+
+    print(r.text)
+
+
+def get_data_from_api_and_cleansing(command):
     query_payload = {
         'size': 6000,
         'page': 1,
@@ -40,24 +87,58 @@ def get_data_from_api():
 
     sales_transaction_json = json.loads(sales_transaction.content)
 
+    # Data Cleansing and Formatting
     sales_transaction_rows = sales_transaction_json['rows']
     st_df = pd.DataFrame(sales_transaction_rows)
-    st_df.head(10)
+    st_df['createdAt'] = pd.to_datetime(st_df['createdAt'])
+
+    st_df['day'] = (st_df['createdAt']).dt.day
+    st_df['month'] = (st_df['createdAt']).dt.month
+    st_df['year'] = (st_df['createdAt']).dt.year
+
+    if command == 'daily':
+        st_gmy_df = st_df.groupby(['year', 'month', 'day'])[
+            'total_price_offline_out_before'].sum().reset_index()
+        st_gmy_df = st_gmy_df.rename(
+            columns={'total_price_offline_out_before': 'total_price'})
+        st_gmy_df = st_gmy_df.assign(Date=st_gmy_df.year.astype(
+            str) + '-' + st_gmy_df.month.astype(str) + '-' + st_gmy_df.day.astype(str))
+        st_gmy_df.drop(['month', 'year', 'day'], axis=1, inplace=True)
+
+        today = datetime.date.today().strftime("%Y-%m-%d")
+        today_sales = st_gmy_df.loc[st_gmy_df['Date'] == today]
+
+        yesterdayDate = datetime.datetime.now() - datetime.timedelta(1)
+        yesterday = yesterdayDate.strftime("%Y-%m-%d")
+        yesterday_sales = st_gmy_df.loc[st_gmy_df['Date'] == yesterday]
+
+        message = 'รายได้ทั้งหมดวันนี้' + " = " + "555" + \
+            yesterday_sales["total_price"].astype(str) + " " + "บาท"
+
+        send_line_notify_message(message)
+        # return st_df
+    if command == 'month':
+        return st_df
+    if command == 'year':
+        return st_df
 
 
-def send_line_notify():
-    url = 'https://notify-api.line.me/api/notify'
-    token = '1aDXOIcl3z8MB1jHvbDjBNcmeNQCjWlVfplfckgJj5n'
-    headers = {
-        'content-type':
-        'application/x-www-form-urlencoded',
-        'Authorization': 'Bearer '+token
-    }
+def get_daily_sales():
+    get_data_from_api_and_cleansing('daily')
 
-    msg = "todos report today \n"
 
-    r = requests.post(url, headers=headers, data={'message': msg})
-    print(r.text)
+def get_month_sales():
+    get_data_from_api_and_cleansing('month')
+
+
+# def month_sales_store():
+#     sales_data = get_data_from_api_and_cleansing()
+#     print("daily_sales_store")
+
+
+# def year_sales_store():
+#     sales_data = get_data_from_api_and_cleansing()
+#     print("daily_sales_store")
 
 
 with DAG(
@@ -73,9 +154,19 @@ with DAG(
         bash_command='date'
     )
 
-    task_get_data_from_api = PythonOperator(
-        task_id='get_data_from_api',
-        python_callable=get_data_from_api
+    task_send_line_notify_start = PythonOperator(
+        task_id='send_line_notify_start',
+        python_callable=send_line_notify_start
+    )
+
+    task_get_daily_sales = PythonOperator(
+        task_id='send_get_daily_sales',
+        python_callable=get_daily_sales
+    )
+
+    task_get_month_sales = PythonOperator(
+        task_id='send_get_month_sales',
+        python_callable=get_month_sales
     )
 
     task_save = BashOperator(
@@ -83,9 +174,9 @@ with DAG(
         bash_command='date'
     )
 
-    task_sent_line_notify = PythonOperator(
-        task_id='send_line_notify',
-        python_callable=send_line_notify
+    task_sent_line_notify_end = PythonOperator(
+        task_id='sent_line_notify_end',
+        python_callable=sent_line_notify_end
     )
 
     task_end = BashOperator(
@@ -93,4 +184,5 @@ with DAG(
         bash_command='date'
     )
 
-task_start >> task_get_data_from_api >> task_save >> task_sent_line_notify >> task_end
+task_start >> task_send_line_notify_start >> [
+    task_get_daily_sales, task_get_month_sales] >> task_save >> task_sent_line_notify_end >> task_end
