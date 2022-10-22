@@ -52,7 +52,7 @@ def sent_line_notify_end():
     print(r.text)
 
 
-def send_line_notify_message(message):
+def send_line_notify_message_dairy(message):
     url = 'https://notify-api.line.me/api/notify'
     token = '1aDXOIcl3z8MB1jHvbDjBNcmeNQCjWlVfplfckgJj5n'
     headers = {
@@ -68,12 +68,46 @@ def send_line_notify_message(message):
     print(r.text)
 
 
+def send_line_notify_message_month(message):
+    url = 'https://notify-api.line.me/api/notify'
+    token = '1aDXOIcl3z8MB1jHvbDjBNcmeNQCjWlVfplfckgJj5n'
+    headers = {
+        'content-type':
+        'application/x-www-form-urlencoded',
+        'Authorization': 'Bearer '+token
+    }
+
+    msg = message
+    r = requests.post(url, headers=headers, data={
+                      'message': msg, 'stickerPackageId': 1070, 'stickerId': 17854})
+
+    print(r.text)
+
+
+def send_line_notify_message_year(message):
+    url = 'https://notify-api.line.me/api/notify'
+    token = '1aDXOIcl3z8MB1jHvbDjBNcmeNQCjWlVfplfckgJj5n'
+    headers = {
+        'content-type':
+        'application/x-www-form-urlencoded',
+        'Authorization': 'Bearer '+token
+    }
+
+    msg = message
+    r = requests.post(url, headers=headers, data={
+                      'message': msg, 'stickerPackageId': 1070, 'stickerId': 17854})
+
+    print(r.text)
+
+
+def save_data_to_mongodb():
+    print("save_data_to_mongodb")
+
+
 def get_data_from_api_and_cleansing(command):
     query_payload = {
         'size': 6000,
         'page': 1,
-        # 'startDate': "2022-09-30",
-        # 'endDate': "2022-10-31",
         'type': "ออก",
         'DashBoardPage': 'true'
     }
@@ -106,15 +140,19 @@ def get_data_from_api_and_cleansing(command):
     if command == 'daily':
         today = datetime.date.today().strftime("%Y-%m-%d")
         today_sales = st_gmy_df.loc[st_gmy_df['Date'] == today]
+
+        print(today_sales)
+        print(today_sales.empty)
+
         if today_sales.empty:
-            today_sales.loc['0'] = ['0', '0']
+            today_sales.loc['0'] = ['0', '0', '0', '0', '0']
         today_sales_str = today_sales["total_price"].astype("string")
 
         yesterdayDate = datetime.datetime.now() - datetime.timedelta(1)
         yesterday = yesterdayDate.strftime("%Y-%m-%d")
         yesterday_sales = st_gmy_df.loc[st_gmy_df['Date'] == yesterday]
         if yesterday_sales.empty:
-            yesterday_sales.loc['0'] = ['0', '0']
+            yesterday_sales.loc['0'] = ['0', '0', '0', '0', '0']
         yesterday_sales_str = yesterday_sales["total_price"].astype("string")
 
         print("today", today)
@@ -127,19 +165,28 @@ def get_data_from_api_and_cleansing(command):
 
         print("message", message)
 
-        send_line_notify_message(message)
+        send_line_notify_message_dairy(message)
         # return st_df
     if command == 'month':
+        st_gmy_df_my = st_gmy_df.groupby(['month', 'year'])[
+            'total_price_offline_out_before'].sum().reset_index()
+
+        print("st_gmy_df_my1", st_gmy_df_my)
+
+        st_gmy_df_my = st_gmy_df_my.sort_values(
+            by=['year', 'month']).reset_index(drop=True)
         st_gmy_df_my = st_gmy_df.rename(
             columns={'total_price_offline_out_before': 'total_price'})
         st_gmy_df_my = st_gmy_df_my.assign(Date=st_gmy_df_my.year.astype(
             str) + '-' + st_gmy_df_my.month.astype(str))
 
+        print("st_gmy_df_my2", st_gmy_df_my)
+
         this_month = datetime.date.today().strftime("%Y-%m").replace('-0', '-')
         this_month_sales = st_gmy_df_my.loc[st_gmy_df_my['Date'] == this_month]
 
         if this_month_sales.empty:
-            this_month_sales.loc['0'] = ['0', '0']
+            this_month_sales.loc['0'] = ['0', '0', '0', '0', '0']
         this_month_sales_str = this_month_sales["total_price"].astype("string")
 
         today1 = datetime.date.today()
@@ -148,7 +195,7 @@ def get_data_from_api_and_cleansing(command):
                       ).strftime("%Y-%m").replace('-0', '-')
         last_month_sales = st_gmy_df_my.loc[st_gmy_df_my['Date'] == last_month]
         if last_month_sales.empty:
-            last_month_sales.loc['0'] = ['0', '0']
+            last_month_sales.loc['0'] = ['0', '0', '0', '0', '0']
         last_month_sales_str = last_month_sales["total_price"].astype("string")
 
         print("this_month_sales", this_month_sales)
@@ -161,7 +208,7 @@ def get_data_from_api_and_cleansing(command):
 
         print("message", message)
 
-        send_line_notify_message(message)
+        send_line_notify_message_month(message)
         # return st_df
     if command == 'year':
         return st_df
@@ -200,6 +247,11 @@ with DAG(
         bash_command='date'
     )
 
+    task_save_data_to_mongodb = PythonOperator(
+        task_id='save_data_to_mongodb',
+        python_callable=save_data_to_mongodb
+    )
+
     task_send_line_notify_start = PythonOperator(
         task_id='send_line_notify_start',
         python_callable=send_line_notify_start
@@ -235,5 +287,5 @@ with DAG(
         bash_command='date'
     )
 
-task_start >> task_send_line_notify_start >> [
+task_start >> task_send_line_notify_start >> task_save_data_to_mongodb >> [
     task_get_daily_sales, task_get_month_sales, task_get_year_sales] >> task_save >> task_sent_line_notify_end >> task_end
