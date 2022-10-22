@@ -46,29 +46,13 @@ def sent_line_notify_end():
         'Authorization': 'Bearer '+token
     }
 
-    msg = "จบการทำงาน ETL \n"
+    msg = "จบการทำงาน ETL บันทึกข้อมูลสำเร็จ\n"
     r = requests.post(url, headers=headers, data={'message': msg})
 
     print(r.text)
 
 
-def send_line_notify_message_month(message):
-    url = 'https://notify-api.line.me/api/notify'
-    token = '1aDXOIcl3z8MB1jHvbDjBNcmeNQCjWlVfplfckgJj5n'
-    headers = {
-        'content-type':
-        'application/x-www-form-urlencoded',
-        'Authorization': 'Bearer '+token
-    }
-
-    msg = message
-    r = requests.post(url, headers=headers, data={
-                      'message': msg, 'stickerPackageId': 1070, 'stickerId': 17854})
-
-    print(r.text)
-
-
-def get_data_from_api():
+def get_data_from_api_and_insert_to_db():
     query_payload = {
         'size': 6000,
         'page': 1,
@@ -90,59 +74,59 @@ def get_data_from_api():
     st_df = pd.DataFrame(sales_transaction_rows)
 
     st_df['createdAt'] = pd.to_datetime(st_df['createdAt'])
+    st_df['day'] = (st_df['createdAt']).dt.day
     st_df['month'] = (st_df['createdAt']).dt.month
     st_df['year'] = (st_df['createdAt']).dt.year
 
     st_df['Time'] = pd.to_datetime(st_df['createdAt'])
-    st_gmy_df = st_df.groupby(['month', 'year'])[
-        'total_price_offline_out_before'].sum().reset_index()
-    st_gmy_df = st_gmy_df.sort_values(
-        by=['year', 'month']).reset_index(drop=True)
-    st_gmy_df_my = st_gmy_df.rename(
-        columns={'total_price_offline_out_before': 'total_price'})
 
-    st_gmy_df_my = st_gmy_df_my.assign(Date=st_gmy_df_my.year.astype(
-        str) + '-' + st_gmy_df_my.month.astype(str))
-    st_gmy_df_my.drop(['month', 'year'], axis=1, inplace=True)
+    # explode order
+    st_df_explode = st_df.explode('order')
+    st_df_explode = st_df_explode.reset_index()
 
-    this_month = datetime.date.today().strftime("%Y-%m").replace(' 0', ' ')
-    this_month_sales = st_gmy_df_my.loc[st_gmy_df_my['Date'] == this_month]
+    # Spreading Order Object  into Product Name
+    product_sales_df = pd.DataFrame(st_df_explode['order'].to_dict())
+    product_sales_df = product_sales_df.transpose()
 
-    print("this_month_sales", this_month_sales)
+    product_sales_df_product = pd.DataFrame(
+        product_sales_df['product'].to_dict())
+    product_sales_df_product = product_sales_df_product.transpose()
 
-    if this_month_sales.empty:
-        this_month_sales.loc['0'] = ['0', '0']
-    this_month_sales_str = this_month_sales["total_price"]
-    this_month_sales_str = round(this_month_sales_str, 2).astype("string")
-    this_month_sales_str.reset_index(drop=True, inplace=True)
+    product_sales_df['product_name'] = product_sales_df_product['name']
+    product_sales_df['product_type_code'] = product_sales_df_product['type_code']
+    product_sales_df['product_price'] = product_sales_df_product['price']
+    product_sales_df['product_cost_price'] = product_sales_df_product['cost_price']
+    product_sales_df['product_inventory'] = product_sales_df_product['inventory']
+    product_sales_df['product_unit'] = product_sales_df_product['unit']
+    product_sales_df['product'] = product_sales_df_product['_id']
 
-    today1 = datetime.date.today()
-    first1 = today1.replace(day=1)
-    last_month = (first1 - datetime.timedelta(days=1)
-                  ).strftime("%Y-%m").replace('-0', '-')
-    last_month_sales = st_gmy_df_my.loc[st_gmy_df_my['Date'] == last_month]
+    st_df_explode['product_name'] = product_sales_df['product_name']
+    st_df_explode['product_type_code'] = product_sales_df['product_type_code']
+    st_df_explode['product_price'] = product_sales_df['product_price']
+    st_df_explode['product_cost_price'] = product_sales_df['product_cost_price']
+    st_df_explode['product_inventory'] = product_sales_df['product_inventory']
+    st_df_explode['product_unit'] = product_sales_df['product_unit']
+    st_df_explode['order'] = product_sales_df['product']
+    st_df_explode['amount'] = product_sales_df['amount']
+    st_df_explode['price_per_amount'] = product_sales_df['price']
 
-    if last_month_sales.empty:
-        last_month_sales.loc['0'] = ['0', '0']
-    last_month_sales_str = last_month_sales["total_price"]
-    last_month_sales_str = round(last_month_sales_str, 2).astype("string")
-    last_month_sales_str.reset_index(drop=True, inplace=True)
-
-    print("this_month", this_month)
-    print("this_month_sales_str", this_month_sales_str)
-    print("last_month_sales_str", last_month_sales_str)
-
-    message = "สรุปประจำเดือน " + this_month + "\n▶รายได้ทั้งหมด" + " = " + this_month_sales_str + \
-        " บาท" + "\n▶รายได้ทั้งหมดเดือนก่อน" + " = " + last_month_sales_str + " บาท"
-
-    print("message", message)
-
-    send_line_notify_message_month(message)
+    st_df_explode.drop(['__v', 'quotation'], axis=1, inplace=True)
+    employee_df = pd.DataFrame(st_df_explode['employee'].to_dict())
+    employee_df = employee_df.transpose()
+    employee_df_department = pd.DataFrame(employee_df['department'].to_dict())
+    employee_df_department = employee_df_department.transpose()
+    employee_df['department_name'] = employee_df_department['name']
+    employee_df['department_code'] = employee_df_department['department_code']
+    st_df_explode['employee_firstname'] = employee_df['firstname']
+    st_df_explode['employee_lastname'] = employee_df['lastname']
+    st_df_explode['employee_department_name'] = employee_df['department_name']
+    st_df_explode['employee_department_code'] = employee_df['department_code']
+    st_df_explode.head(10)
 
 
 with DAG(
-    dag_id='sales_month_dag',
-    schedule_interval='0 0 * * 0',
+    dag_id='sales_analytic_save_to_db_dag',
+    schedule_interval='01 00 * * *',
     start_date=days_ago(1),
     catchup=False
 ) as dag:
@@ -158,9 +142,9 @@ with DAG(
         python_callable=send_line_notify_start
     )
 
-    task_get_data_from_api = PythonOperator(
-        task_id='send_get_data_from_api',
-        python_callable=get_data_from_api
+    task_get_data_from_api_and_insert_to_db = PythonOperator(
+        task_id='get_data_from_api_and_insert_to_db',
+        python_callable=get_data_from_api_and_insert_to_db
     )
 
     task_sent_line_notify_end = PythonOperator(
@@ -173,4 +157,4 @@ with DAG(
         bash_command='date'
     )
 
-task_start >> task_get_data_from_api >> task_end
+task_start >> task_send_line_notify_start >> task_get_data_from_api_and_insert_to_db >> task_sent_line_notify_end >> task_end

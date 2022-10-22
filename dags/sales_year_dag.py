@@ -144,7 +144,7 @@ def get_data_from_api():
 
 with DAG(
     dag_id='sales_year_dag',
-    schedule_interval='01 00 * * *',
+    schedule_interval='0 0 1 * *',
     start_date=days_ago(1),
     catchup=False
 ) as dag:
