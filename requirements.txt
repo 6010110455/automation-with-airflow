@@ -3,3 +3,5 @@ numpy
 requests
 openpyxl
 pymongo
+mysql.connector
+sqlalchemy

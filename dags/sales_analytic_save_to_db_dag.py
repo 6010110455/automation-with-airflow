@@ -12,6 +12,8 @@ from airflow.utils.dates import days_ago
 import os
 import pandas as pd
 import datetime
+import mysql.connector
+from sqlalchemy import create_engine, DateTime
 
 from pandas.io.json import json_normalize
 from pymongo import MongoClient
@@ -20,6 +22,12 @@ from pymongo import MongoClient
 API_URL = "https://stp.eappsoft.net/api/v1"
 TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjYxMzcwYzMwMWMyNzdjMDdlOGI5ZjgyYSIsInVzZXJuYW1lIjoic3VwZXJ1c2VyIiwiZXhwIjoxNjcwNDYzNzc0LCJpYXQiOjE2NjI2ODc3NzR9.EqCp-cHJeMmxtKIUA-7fvWlbmCIAxzYS-wmCMzhzufg"
 size = 6000
+
+HOST_URL = 'localhost'
+MYSQL_PASSWORD = '29012542'
+MYSQL_USER = 'localadmin'
+MYSQL_DATABASE = 'sales_storedb'
+MYSQL_TABLE_NAME = 'salesstore1'
 
 
 def send_line_notify_start():
@@ -31,7 +39,7 @@ def send_line_notify_start():
         'Authorization': 'Bearer '+token
     }
 
-    msg = "เริ่มการทำงาน ETL \n"
+    msg = "เริ่มดึงข้อมูล เพื่อบันทึกลงดาต้าเบส\n"
     r = requests.post(url, headers=headers, data={'message': msg})
 
     print(r.text)
@@ -46,7 +54,7 @@ def sent_line_notify_end():
         'Authorization': 'Bearer '+token
     }
 
-    msg = "จบการทำงาน ETL บันทึกข้อมูลสำเร็จ\n"
+    msg = "จบการทำงาน บันทึกข้อมูลสำเร็จ\n"
     r = requests.post(url, headers=headers, data={'message': msg})
 
     print(r.text)
@@ -79,6 +87,21 @@ def get_data_from_api_and_insert_to_db():
     st_df['year'] = (st_df['createdAt']).dt.year
 
     st_df['Time'] = pd.to_datetime(st_df['createdAt'])
+
+    # Spreading Customer Object  into Customer Name
+    customer_sales_df = pd.DataFrame(st_df['customer'].to_dict())
+
+    customer_sales_df = customer_sales_df.transpose()
+    customer_type_sales_df = pd.DataFrame(customer_sales_df['type'].to_dict())
+    customer_type_sales_df = customer_type_sales_df.transpose()
+    # Combine into main datafram
+    customer_sales_df['customer_type_name'] = customer_type_sales_df['name']
+    customer_sales_df['type'] = customer_type_sales_df['_id']
+
+    # Combine into main datafram
+    st_df['customer_name'] = customer_sales_df['name']
+    st_df['customer_type'] = customer_sales_df['customer_type_name']
+    st_df['customer'] = customer_sales_df['_id']
 
     # explode order
     st_df_explode = st_df.explode('order')
@@ -121,7 +144,70 @@ def get_data_from_api_and_insert_to_db():
     st_df_explode['employee_lastname'] = employee_df['lastname']
     st_df_explode['employee_department_name'] = employee_df['department_name']
     st_df_explode['employee_department_code'] = employee_df['department_code']
-    st_df_explode.head(10)
+    st_df_explode['date'] = st_df_explode['createdAt']
+
+    st_df_explode.drop(['employee', 'product_transaction_type', 'updatedAt', '_id', 'Time', 'day',
+                       'month', 'year', 'remark', 'index', 'date', 'order', 'id'], axis=1, inplace=True)
+
+    st_df_explode["employee_department_code"].fillna("-", inplace=True)
+    st_df_explode["customer"].fillna("-", inplace=True)
+    st_df_explode["sale_type"].fillna("-", inplace=True)
+    st_df_explode["customer_name"].fillna("-", inplace=True)
+    st_df_explode["customer_type"].fillna("-", inplace=True)
+    st_df_explode['product_cost_price'].astype(float)
+
+    # Connect to database
+    db = mysql.connector.connect(
+        host='mysql-mysql-1', port="3306", user='root', password='29012542', database='sales_store_db'
+    )
+
+    if not (db.is_connected):
+        print('Fail to Connect')
+    else:
+        print('Connect Successfully')
+
+    create_table_script = """
+        CREATE TABLE IF NOT EXISTS salesstore2 (
+            id INT(8) NOT NULL PRIMARY KEY AUTO_INCREMENT,
+            customer VARCHAR(256),
+            bill_no VARCHAR(256),
+            sale_type VARCHAR(64),
+            customer_name VARCHAR(256),
+            customer_type VARCHAR(256),
+            product_name VARCHAR(256),
+            product_type_code VARCHAR(256),
+            product_price FLOAT(26),
+            product_cost_price FLOAT(26),
+            product_inventory FLOAT(26),
+            product_unit VARCHAR(256),
+            amount FLOAT(24),
+            price_per_amount FLOAT(26),
+            createdAt TIMESTAMP,
+            total_price_offline_out_before FLOAT(26),
+            employee_firstname VARCHAR(128),
+            employee_lastname VARCHAR(128),
+            employee_department_name VARCHAR(128),
+            employee_department_code VARCHAR(128)
+        )
+    """
+
+    cursor = db.cursor()
+    cursor.execute(create_table_script)
+    print('Create Table Success')
+
+    # Create SQL ALchemy Connector
+    connection_string = f'mysql+mysqlconnector://root:29012542@mysql-mysql-1/sales_store_db'
+    print('Connection String', connection_string)
+
+    mysql_engine = create_engine(connection_string)
+
+    datatype = {
+        "createdAt": DateTime
+    }
+
+    st_df_explode.to_sql(con=mysql_engine, name='salesstore2',
+                         if_exists='replace', chunksize=10, index=False, dtype=datatype)
+    print("Success")
 
 
 with DAG(
