@@ -155,10 +155,10 @@ with DAG(
         bash_command='date'
     )
 
-    task_get_data_from_api1 = PythonOperator(
-        task_id='get_data_from_api1',
-        python_callable=get_data_from_api
-    )
+    # task_get_data_from_api1 = PythonOperator(
+    #     task_id='get_data_from_api1',
+    #     python_callable=get_data_from_api
+    # )
 
     task_get_data_from_api = PythonOperator(
         task_id='get_data_from_api',

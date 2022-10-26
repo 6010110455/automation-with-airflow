@@ -146,20 +146,20 @@ with DAG(
         bash_command='date'
     )
 
-    task_send_line_notify_start = PythonOperator(
-        task_id='send_line_notify_start',
-        python_callable=send_line_notify_start
-    )
+    # task_send_line_notify_start = PythonOperator(
+    #     task_id='send_line_notify_start',
+    #     python_callable=send_line_notify_start
+    # )
 
     task_get_data_from_api = PythonOperator(
         task_id='send_get_data_from_api',
         python_callable=get_data_from_api
     )
 
-    task_sent_line_notify_end = PythonOperator(
-        task_id='sent_line_notify_end',
-        python_callable=sent_line_notify_end
-    )
+    # task_sent_line_notify_end = PythonOperator(
+    #     task_id='sent_line_notify_end',
+    #     python_callable=sent_line_notify_end
+    # )
 
     task_end = BashOperator(
         task_id='end',
